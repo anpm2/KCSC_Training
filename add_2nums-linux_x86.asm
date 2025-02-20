@@ -188,7 +188,7 @@ sum:
         cmp dl, 1
         jne .finish
         mov ebx, [ebp + 8]        ; res
-        mov byte [ebx + ecx], '1' ; Nếu có canary thì thêm '1' vào cuối chuỗi kết quả
+        mov byte [ebx + ecx], '1' ; Nếu có carry thì thêm '1' vào cuối chuỗi kết quả
         inc ecx
 
     .finish:

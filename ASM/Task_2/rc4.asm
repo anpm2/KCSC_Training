@@ -1,7 +1,7 @@
 section .data
-    msg_plain db "Nhap plain text: ", 0
+    msg_plain db "Nhap plaintext: ", 0
     msg_key db "Nhap key: ", 0
-    msg_cipher db "Cipher text (hex): ", 0
+    msg_cipher db "ciphertext (hex): ", 0
     
     ; Buffer cho state array
     state times 256 db 0
@@ -12,13 +12,11 @@ section .bss
     cipher resb 512
     
     temp resb 1
-
     plen resd 1
     klen resd 1
 
 section .text
 global _start
-
 _start:
     ; Nhập plain text
     mov eax, msg_plain
@@ -38,22 +36,6 @@ _start:
     call slen
     mov [klen], eax     ; key length
 
-    call ksa            ; Key scheduling algorithm (KSA)
-    call prga           ; Pseudo-random generation algorithm (PRGA) để mã hóa
-    
-    ; In kết quả
-    mov eax, msg_cipher
-    call print
-    mov eax, cipher
-    call print
-    call exit
-
-ksa:
-    push eax
-    push ebx
-    push ecx
-    push edx
-    
     ; Khởi tạo state array
     xor ecx, ecx      ; ecx = 0 --> idx = 0
     .init:
@@ -62,108 +44,145 @@ ksa:
         cmp ecx, 256
         jl .init
 
-    xor ecx, ecx      ; i = 0
-    xor ebx, ebx      ; j = 0
-    .loop:
-        ; j = (j + S[i] + key[i mod klen]) mod 256
-        movzx eax, byte [state + ecx]   ; Zero extend để tránh lỗi
-        add bl, al                      ; j += S[i]
-        
-        ; Tính i mod klen để lấy ký tự key
-        push ecx                        ; Lưu lại ecx
-        mov eax, ecx
-        xor edx, edx
-        div dword [klen]                ; edx = i mod klen
-        movzx eax, byte [key + edx]     ; Lấy key[i mod klen]
-        add bl, al                      ; j += key[i mod klen]
-        pop ecx
-        
-        ; Swap state[i] và state[j]
-        movzx eax, byte [state + ecx]   ; eax = state[i]
-        movzx edx, byte [state + ebx]   ; edx = state[j]
-        mov byte [state + ecx], dl      ; state[i] = state[j]
-        mov byte [state + ebx], al      ; state[j] = state[i]
-        
-        inc ecx                         ; i++
-        cmp ecx, 256
-        jl .loop
+    push cipher
+    push dword [klen]
+    push key
+    push dword [plen]
+    push plain
+    call rc4
+    ; cipher = rc4(plain, plen, key, klen)
     
-    pop edx
-    pop ecx  
-    pop ebx
-    pop eax
-    ret
-
-prga:
-    push eax
-    push ebx
+    mov eax, msg_cipher
+    call print
+    
+    ; Vòng lặp in từng ký tự hex
+    mov ecx, [plen]     ; Load plaintext length
+    mov esi, cipher     ; Load cipher buffer address
+    
+.print_hex:
+    movzx eax, byte [esi]    ; Load byte from cipher
+    
+    ; Print first hex digit
+    mov bl, al
+    shr bl, 4           ; Get high 4 bits
+    mov al, bl
+    call hex_char
+    mov [temp], al      ; Store hex char
+    mov eax, temp
     push ecx
-    push edx
+    call print          ; Print first hex digit
+    pop ecx
+    
+    ; Print second hex digit
+    movzx eax, byte [esi]    ; Reload byte
+    and al, 0x0F        ; Get low 4 bits
+    call hex_char
+    mov [temp], al      ; Store hex char
+    mov eax, temp
+    push ecx
+    call print          ; Print second hex digit
+    pop ecx
+    
+    inc esi             ; Move to next byte
+    dec ecx             ; Decrease counter
+    jnz .print_hex      ; Continue if not zero
+
+    call exit
+
+rc4:
+    push ebp
+    mov ebp, esp
+    push ebx
     push esi
     push edi
+
+    ; ebp + 8  = plain
+    ; ebp + 12 = plen
+    ; ebp + 16 = key
+    ; ebp + 20 = klen
+    ; ebp + 24 = cipher
     
-    xor ecx, ecx      ; i = 0
-    xor ebx, ebx      ; j = 0
-    xor esi, esi      ; index cho plain text
-    xor edi, edi      ; index cho cipher text (hex output)
-    .loop:
-        ; Kiểm tra kết thúc plain text
-        cmp esi, dword [plen]
-        jge .done
-        
-        ; i = (i + 1) mod 256
-        inc cl
-        and cl, 0xFF      ; Đảm bảo trong phạm vi 256
-        
-        ; j = (j + state[i]) mod 256
-        movzx eax, byte [state + ecx]
-        add bl, al
-        and bl, 0xFF
-        
-        ; Swap state[i] và state[j]
-        movzx eax, byte [state + ecx]
-        movzx edx, byte [state + ebx]  
-        mov byte [state + ecx], dl
-        mov byte [state + ebx], al
-        
-        ; t = state[(S[i] + state[j]) mod 256]
-        add al, dl
-        and al, 0xFF      ; Đảm bảo trong phạm vi 256
-        movzx eax, byte [state + eax]   ; al = keystream byte
-        
-        ; XOR với plain text
-        xor al, byte [plain + esi]
-        
-        ; Chuyển sang hex và lưu vào cipher
-        mov ah, al
-        shr al, 4                ; 4 bit cao
-        call hex_char
-        mov byte [cipher + edi], al
-        inc edi
-        
-        mov al, ah
-        and al, 0x0F            ; 4 bit thấp
-        call hex_char  
-        mov byte [cipher + edi], al
-        inc edi
-        
-        inc esi
-        jmp .loop
-        
-    .done:
-        mov byte [cipher + edi], 10   ; Newline
-        inc edi
-        mov byte [cipher + edi], 0    ; thêm null 
-        
+    xor edi, edi    ; j = 0
+    
+    ; KSA
+    xor ecx, ecx    ; i = 0
+.ksa_loop:
+    ; j = (j + state[i] + key[i mod klen]) mod 256
+    movzx eax, byte [state + ecx]  ; state[i]
+    add edi, eax                   ; j += state[i]
+    
+    mov eax, ecx
+    xor edx, edx
+    div dword [ebp + 20]          ; i mod klen
+    mov eax, [ebp + 16]           ; key address
+    movzx eax, byte [eax + edx]   ; key[i mod klen]
+    add edi, eax                  ; j += key[i mod klen]
+    and edi, 0xFF                 ; j mod 256
+    
+    ; Swap state[i] and state[j]
+    mov al, [state + ecx]
+    mov bl, [state + edi]
+    mov [state + edi], al
+    mov [state + ecx], bl
+    
+    inc ecx
+    cmp ecx, 256
+    jl .ksa_loop
+    
+    ; PRGA
+    xor ecx, ecx    ; i = 0
+    xor edi, edi    ; j = 0
+    xor esi, esi    ; output index
+    
+.prga_loop:
+    ; Check if we've processed all bytes
+    cmp esi, [ebp + 12]    ; Compare with plen
+    jge .prga_done
+    
+    ; i = (i + 1) mod 256
+    inc ecx
+    and ecx, 0xFF
+    
+    ; j = (j + state[i]) mod 256
+    movzx eax, byte [state + ecx]
+    add edi, eax
+    and edi, 0xFF
+    
+    ; Swap state[i] and state[j]
+    mov al, [state + ecx]
+    mov bl, [state + edi]
+    mov [state + edi], al
+    mov [state + ecx], bl
+    
+    ; t = (state[i] + state[j]) mod 256
+    movzx eax, byte [state + ecx]
+    movzx ebx, byte [state + edi]
+    add eax, ebx
+    and eax, 0xFF
+    
+    ; k = state[t]
+    movzx eax, byte [state + eax]
+    
+    ; XOR with plaintext
+    mov ebx, [ebp + 8]    ; plain
+    movzx ebx, byte [ebx + esi]
+    xor eax, ebx
+    
+    ; Store in cipher
+    mov ebx, [ebp + 24]   ; cipher
+    mov [ebx + esi], al
+    
+    inc esi                ; Move to next byte
+    jmp .prga_loop
+    
+.prga_done:
     pop edi
     pop esi
-    pop edx  
-    pop ecx
     pop ebx
-    pop eax
+    pop ebp
     ret
 
-; Chuyển thành hex
+; Chuyển thành ký tự hex
 hex_char:
     cmp al, 10
     jge .letter
@@ -179,15 +198,12 @@ print:
     push ebx
     push eax
     call slen
-
     mov edx, eax
     pop eax
-
     mov ecx, eax
     mov ebx, 1
     mov eax, 4
     int 0x80
-
     pop ebx
     pop ecx
     pop edx
@@ -219,7 +235,7 @@ scan:
     mov al, [temp]
     
     ; Kiểm tra có phải newline không
-    cmp al, 10          ; '\n'
+    cmp al, 10
     je .done
     
     ; Nếu không phải newline, lưu vào buffer
@@ -240,7 +256,6 @@ scan:
 slen:
     push ebx
     mov ebx, eax
-
     .next_char:
         cmp byte [eax], 0
         jz .end

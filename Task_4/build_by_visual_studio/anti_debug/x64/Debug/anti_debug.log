@@ -1,0 +1,3 @@
+﻿  anti_debug.cpp
+D:\CTF\rev\KCSC_KMA\Training_KCSC\Task4\vs\anti_debug\anti_debug\anti_debug.cpp(26,21): warning C4312: 'type cast': conversion from 'unsigned int' to 'HANDLE' of greater size
+  anti_debug.vcxproj -> D:\CTF\rev\KCSC_KMA\Training_KCSC\Task4\vs\anti_debug\x64\Debug\anti_debug.exe

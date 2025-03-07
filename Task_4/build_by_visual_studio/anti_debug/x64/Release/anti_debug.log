@@ -1,0 +1,10 @@
+﻿  anti_debug.cpp
+D:\Documents\t\Task_4\anti_debug_visual_studio\anti_debug\anti_debug.cpp(32,15): warning C4312: 'type cast': conversion from 'unsigned int' to 'HANDLE' of greater size
+D:\Documents\t\Task_4\anti_debug_visual_studio\anti_debug\anti_debug.cpp(76,24): warning C4244: '=': conversion from 'ULONGLONG' to 'DWORD', possible loss of data
+D:\Documents\t\Task_4\anti_debug_visual_studio\anti_debug\anti_debug.cpp(78,22): warning C4244: '=': conversion from 'ULONGLONG' to 'DWORD', possible loss of data
+  Generating code
+  18 of 19 functions (94.7%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  anti_debug.vcxproj -> D:\Documents\t\Task_4\anti_debug_visual_studio\x64\Release\anti_debug.exe
